@@ -17,6 +17,7 @@
 #include "mm3_display_settings.h"
 #include "mm3_frame_limit.h"
 #include "mm3_launcher.h"
+#include "mm3_launcher_config.h"
 #include "mm3_crash_diagnostics.h"
 #include "mm3_world_lighting.h"
 #include "mm3_collision_profile.h"
@@ -407,6 +408,28 @@ static void mm3_full_speed(void)
 #endif
 }
 
+#ifndef _WIN32
+/* Off Windows a scripted start (RECOMP_PB_EXEC set, as play.py and launcher
+ * scripts do) skips the RmlUi launcher, so nothing applied launcher.ini: its
+ * mods, FOV, HUD, gameplay and key settings were ignored. On Windows
+ * mm3_launcher_run applies it whenever no window is shown; do the same here.
+ * Environment values already set still win (mm3_launcher_config_startup). */
+static void mm3_apply_saved_launcher_settings(void)
+{
+    const char *script = getenv("RECOMP_PB_EXEC"), *mode = getenv("MM3_LAUNCHER");
+    MM3LauncherConfig config;
+    char warning[512] = "";
+    if (!script || !*script || (mode && !strcmp(mode, "1")))
+        return;
+    if (!mm3_launcher_config_startup(&config, warning, sizeof warning) || *warning)
+        fprintf(stderr, "[MM3_LAUNCHER] %s\n", warning);
+    if (!mm3_launcher_config_apply(&config, warning, sizeof warning))
+        fprintf(stderr, "[MM3_LAUNCHER] %s; starting with the defaults\n", warning);
+    else
+        fprintf(stderr, "[MM3_LAUNCHER] saved launcher settings applied\n");
+}
+#endif
+
 int main(void)
 {
     void *xbe_data = NULL;
@@ -433,6 +456,8 @@ int main(void)
                 entered_directory);
 #ifdef _WIN32
     if (!mm3_launcher_run()) return 0;
+#else
+    mm3_apply_saved_launcher_settings();
 #endif
     /* Bootstrap capture uses the real audio engine without displaying a game
      * window or changing the user's device volume or saved preferences. */
